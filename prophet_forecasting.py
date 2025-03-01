@@ -19,21 +19,21 @@ def mean_absolute_percentage_error(y_true, y_pred):
 data_raw = process_data.get_data()
 #print(data_raw.head())
 
-#----------------------------------------------------------------------------------------
-#plot imported data
-color_pal = sns.color_palette()
-data_raw.plot(
-    style='.',
-    figsize=(10, 5),
-    ms=1,
-    color=color_pal[0],
-    title='Raw input data: wh over date times'
+#-------------------------#plot imported data---------------------------------------------------------------
+# color_pal = sns.color_palette()
+# data_raw.plot(
+#     style='.',
+#     figsize=(10, 5),
+#     ms=1,
+#     color=color_pal[0],
+#     title='Raw input data: wh over date times'
 
-)
-plt.show()
+# )
+# plt.show()
 #----------------------------------------------------------------------------------------
 
-#Time series features.
+#---------------------------#Time series features.-------------------------------------------------------------
+
 cat_type = CategoricalDtype(categories=['Monday','Tuesday', 'Wednesday','Thursday','Friday','Saturday','Sunday'],ordered=True)
 
 def create_features(df, label=None):
@@ -70,29 +70,60 @@ features_and_target = pd.concat([X, y], axis=1)
 print(features_and_target.head())
 
 #Plot showing trend on day of week and seasonality
-fig, ax = plt.subplots(figsize=(10, 5))
-sns.boxplot(data=features_and_target.dropna(),
-            x='weekday',
-            y='Energy_Wh',
-            hue='season',
-            ax=ax,
-            linewidth=1)
-ax.set_title('Charging energy by day of week')
-ax.set_xlabel('Day of Week')
-ax.set_ylabel('Energy (Wh)')
-ax.legend(bbox_to_anchor=(1, 1))
-plt.show()
+# fig, ax = plt.subplots(figsize=(10, 5))
+# sns.boxplot(data=features_and_target.dropna(),
+#             x='weekday',
+#             y='Energy_Wh',
+#             hue='season',
+#             ax=ax,
+#             linewidth=1)
+# ax.set_title('Charging energy by day of week')
+# ax.set_xlabel('Day of Week')
+# ax.set_ylabel('Energy (Wh)')
+# ax.legend(bbox_to_anchor=(1, 1))
+# plt.show()
 
 #Plot showing hour of day box with seasonality
-fig, ax = plt.subplots(figsize=(10, 5))
-sns.boxplot(data=features_and_target.dropna(),
-            x='hour',
-            y='Energy_Wh',
-            hue='season',
-            ax=ax,
-            linewidth=1)
-ax.set_title('Charging energy by hour of day')
-ax.set_xlabel('Hour of day')
-ax.set_ylabel('Energy (Wh)')
-ax.legend(bbox_to_anchor=(1, 1))
-plt.show()
+# fig, ax = plt.subplots(figsize=(10, 5))
+# sns.boxplot(data=features_and_target.dropna(),
+#             x='hour',
+#             y='Energy_Wh',
+#             hue='season',
+#             ax=ax,
+#             linewidth=1)
+# ax.set_title('Charging energy by hour of day')
+# ax.set_xlabel('Hour of day')
+# ax.set_ylabel('Energy (Wh)')
+# ax.legend(bbox_to_anchor=(1, 1))
+# plt.show()
+#----------------------------------------------------------------------------------------
+
+#-----------------------------Train / Test split-----------------------------------------------------------
+
+split_date = '1-aug-2024'
+data_train = data_raw.loc[data_raw.index <= split_date].copy()
+data_test = data_raw.loc[data_raw.index > split_date].copy()
+
+# Plot train and test so you can see where we have split
+# data_test \
+#     .rename(columns={'Energy_Wh': 'TEST SET'}) \
+#     .join(data_train.rename(columns={'Energy_Wh': 'TRAINING SET'}),
+#           how='outer') \
+#     .plot(figsize=(10, 5), title='test', style='.', ms=1)
+# plt.show()
+
+#----------------------------------------------------------------------------------------
+
+#----------------------------Prophet Implementation------------------------------------------------------------
+
+data_train_prophet = data_train.reset_index().rename(columns={'Start time':'ds','Energy_Wh':'y'})
+
+model = Prophet()
+model.fit(data_train_prophet)
+
+#test data frame
+data_test_prophet = data_test.reset_index().rename(columns={'Start time':'ds','Energy_Wh':'y'})
+
+test_predict = model.predict(data_test_prophet)
+
+print(test_predict.head())
