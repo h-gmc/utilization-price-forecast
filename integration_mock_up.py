@@ -6,6 +6,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # Global parameters: dynamic price index range and forecast period
+PRICE_ELASTICITY = 0.09  # Factor that changes volume based on price change
 PRICE_INDEX_MIN = 1.0   # Minimum dynamic price index
 PRICE_INDEX_MAX = 1.4   # Maximum dynamic price index
 FORECAST_START_DATE = datetime(2024, 7, 1)   # Start date for forecast simulation
@@ -78,9 +79,10 @@ def simulate_forecast(forecast_start_date, simulation_end_date, scalemin=PRICE_I
         # Merge actual hourly data with forecasted price indices to compute dynamic revenue per hour
         actual_next_day = actual_next_day.rename(columns={'Start time': 'ds', 'Energy_Wh': 'actual_energy'})
         merged_actual = fcst_day[['ds', 'price_index']].merge(actual_next_day[['ds', 'actual_energy']], on='ds', how='inner')
-        merged_actual['revenue_with_dynamic_price'] = merged_actual['actual_energy'] * merged_actual['price_index']
+        merged_actual['volume_delta'] = (merged_actual['price_index'] - 1) * merged_actual['actual_energy'] * PRICE_ELASTICITY
+        merged_actual['revenue_with_dynamic_price'] = (merged_actual['actual_energy'] - merged_actual['volume_delta']) * merged_actual['price_index']
         revenue_with_dynamic_price = merged_actual['revenue_with_dynamic_price'].sum()
-        
+    
         # Compute percentage difference using revenue with dynamic price vs actual revenue
         pct_diff = round((revenue_with_dynamic_price - actual_revenue) / actual_revenue, 2) if actual_revenue and actual_revenue != 0 else None
         
