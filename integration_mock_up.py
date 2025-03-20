@@ -110,3 +110,9 @@ if __name__ == '__main__':
     results_df = simulate_forecast(FORECAST_START_DATE, SIMULATION_END_DATE)
     print("\nDaily forecasting simulation results:")
     print(results_df)
+    totals = results_df.aggregate({'actual_revenue': 'sum', 'revenue_with_dynamic_price': 'sum'})
+    totals['pct_diff'] = (totals['revenue_with_dynamic_price'] - totals['actual_revenue']) / totals['actual_revenue']
+    # make pct diff print decimal value with 4 decimals
+    totals['pct_diff'] = f"{totals['pct_diff']:,.4f}"
+    print("\nTotal revenues")
+    print(totals)
