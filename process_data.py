@@ -26,6 +26,9 @@ def get_data(file_path="data/site_data.csv"):
     # Convert Energy_Wh to numeric and drop rows with NaN values in Energy_Wh
     df["Energy_Wh"] = pd.to_numeric(df["Energy_Wh"], errors="coerce")
     df.dropna(subset=["Energy_Wh"], inplace=True)
+
+    #Adjust obfuscated energy data by dividing by 10, convert to kwh by dividing by 1000
+    df["Energy_Wh"] = df["Energy_Wh"] / 10 / 1000
     
     # List to store hourly contributions
     hourly_data = []
