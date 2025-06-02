@@ -11,6 +11,8 @@ from collections import defaultdict
 
 TAR_PATH = os.path.join("data2", "2025-05-26.tar.gz")
 METADATA_PATH = os.path.join("data2", "metadata.json")
+# Duckdb connection
+con = duckdb.connect("database.db")
 
 # ------------------------
 # Data Loading & Parsing
@@ -192,21 +194,33 @@ def load_metadata(metadata_path):
 # ------------------------
 
 if __name__ == "__main__":
-    # ----------------------------
-    # Load and parse session data
-    # ----------------------------
-    charger_logs = load_charger_statuses(TAR_PATH)
+    data_in_duckdb = True
+    if not data_in_duckdb:
 
-    # Inspect all unique statuses
-    unique_statuses = get_all_unique_statuses(charger_logs)
-    print("\n[INFO] Unique status values in data:")
-    for s in unique_statuses:
-        print(f" - {s}")
+        # ----------------------------
+        # Load and parse session data
+        # ----------------------------
+        charger_logs = load_charger_statuses(TAR_PATH)
 
-    # Extract sessions from logs
-    sessions = extract_charging_sessions(charger_logs)
+        # Inspect all unique statuses
+        unique_statuses = get_all_unique_statuses(charger_logs)
+        print("\n[INFO] Unique status values in data:")
+        for s in unique_statuses:
+            print(f" - {s}")
 
-    # ----------------------------
+        # Extract sessions from logs
+        sessions = extract_charging_sessions(charger_logs)
+
+        # ----------------------------
+        # Build DataFrame from sessions
+        # ----------------------------
+        sessions_df = pd.DataFrame(sessions, columns=["site_id", "charger_id", "start", "end", "duration"])
+        sessions_df["start_dt"] = pd.to_datetime(sessions_df["start"], unit="s")
+        sessions_df["hour"] = sessions_df["start_dt"].dt.floor("H")
+        sessions_df["day"] = sessions_df["start_dt"].dt.date
+        con.execute("CREATE TABLE sessions AS SELECT * FROM sessions_df")
+
+     # ----------------------------
     # Load and inspect metadata
     # ----------------------------
     site_metadata_df, charger_metadata_df = load_metadata(METADATA_PATH)
@@ -217,30 +231,21 @@ if __name__ == "__main__":
     print(charger_metadata_df.head(2))
 
     # ----------------------------
-    # Build DataFrame from sessions
+    # DuckDB UI
     # ----------------------------
-    df = pd.DataFrame(sessions, columns=["site_id", "charger_id", "start", "end", "duration"])
-    df["start_dt"] = pd.to_datetime(df["start"], unit="s")
-    df["hour"] = df["start_dt"].dt.floor("H")
-    df["day"] = df["start_dt"].dt.date
-
-    # ----------------------------
-    # Sample output
-    # ----------------------------
-    print("\n[INFO] Sample charging sessions:")
-    for session in sessions[:10]:
-        site, charger, start, end, dur = session
-        print(f"{site} | {charger} | Start: {start} | End: {end} | Duration: {dur}s")
+    con.execute("CALL start_ui_server()")
+    print("Duckdb UI started on http://localhost:4213")
 
     # ----------------------------
     # DuckDB query
     # ----------------------------
     print("\n[INFO] Running first DuckDB query: total charge time per site per hour...")
-    result = duckdb.query("""
+    result = con.query("""
         SELECT site_id, hour, SUM(duration) AS total_seconds
-        FROM df
+        FROM sessions
         GROUP BY site_id, hour
         ORDER BY hour
     """).to_df()
+    input("Press enter to stop")
 
-    print(result.head(10))
+    print(result.size)
