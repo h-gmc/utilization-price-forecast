@@ -18,7 +18,7 @@ con = duckdb.connect("database.db")
 # Data Loading & Parsing
 # ------------------------
 
-def load_charger_statuses(tar_path):
+def load_charger_statuses(tar_path, read_first=None):
     """
     Streams and parses a .tar.gz file containing JSON timeseries data,
     grouping by (nobilId, evseUid) and sorting each group's entries by timestamp.
@@ -37,6 +37,9 @@ def load_charger_statuses(tar_path):
         for i, member in enumerate(tar):
             if not member.isfile() or not member.name.startswith("data/"):
                 continue
+            # For reading only a part of the data
+            if read_first is not None and i > read_first:
+                break
 
             f = tar.extractfile(member)
             if f is not None:
@@ -121,10 +124,12 @@ def load_metadata(metadata_path):
 
     sites = []
     chargers = []
+    text_value_con_attrs = [1, 4, 5, 17, 19, 20, 25, 26]
 
     for station in meta.get("chargerstations", []):
         csmd = station.get("csmd", {})
         attrs = station.get("attr", {})
+        st = attrs.get("st", {})
         conn_map = attrs.get("conn", {})
 
         # ------------------------
@@ -146,10 +151,9 @@ def load_metadata(metadata_path):
             except ValueError:
                 pass  # Leave lat/lon as None
 
-
-        sites.append({
+        site_dict = {
             "site_id": site_id,
-            "site_name": csmd.get("Name"),
+            "site_name": csmd.get("name"),
             "operator": csmd.get("Operator"),
             "owner": csmd.get("Owned_by"),
             "street": csmd.get("Street"),
@@ -159,43 +163,36 @@ def load_metadata(metadata_path):
             "county": csmd.get("County"),
             "latitude": lat,
             "longitude": lon,
-            "availability": csmd.get("attrname: Availability"),
-            "open_24h": csmd.get("attrname: Open 24h"),
-            "accessibility": csmd.get("attrname: Accessibility"),
-        })
+        }
+        for _, v in st.items():
+            site_dict[v['attrname']] = v['trans']
+        sites.append(site_dict)
 
         # ------------------------
         # Charger-level metadata
         # ------------------------
-        for conn_key, conn_attrs in conn_map.items():
+        for _, conn_attrs in conn_map.items():
             charger_id = conn_attrs.get("28", {}).get("attrval")  # EVSE ID
             if not charger_id:
                 continue
-
-            chargers.append({
+            charger_dict = {
                 "charger_id": charger_id,
                 "site_id": site_id,
-                "power_kW": conn_attrs.get("24", {}).get("attrval"),
-                "connector_type": conn_attrs.get("20", {}).get("attrval"),
-                "amperage": conn_attrs.get("attrname: Amperage (A)", {}).get("attrval"),
-                "charge_mode": conn_attrs.get("attrname: Charge mode", {}).get("attrval"),
-                "voltage": conn_attrs.get("attrname: Voltage (V)", {}).get("attrval"),
-                "fixed_cable": conn_attrs.get("attrname: Fixed cable", {}).get("attrval"),
-                "payment_methods": conn_attrs.get("attrname: Payment method", {}).get("attrval"),
-            })
+            }
+            for k, v in conn_attrs.items():
+                value = v['trans'] if int(k) in text_value_con_attrs else v['attrval']
+                charger_dict[v['attrname']] = value
+            chargers.append(charger_dict)
 
-    site_metadata_df = pd.DataFrame(sites)
-    charger_metadata_df = pd.DataFrame(chargers)
-
-    return site_metadata_df, charger_metadata_df
+    return pd.DataFrame(sites), pd.DataFrame(chargers)
 
 # ------------------------
 # Main Execution
 # ------------------------
 
 if __name__ == "__main__":
-    data_in_duckdb = True
-    if not data_in_duckdb:
+    sessions_in_duckdb = True
+    if not sessions_in_duckdb:
 
         # ----------------------------
         # Load and parse session data
@@ -216,36 +213,26 @@ if __name__ == "__main__":
         # ----------------------------
         sessions_df = pd.DataFrame(sessions, columns=["site_id", "charger_id", "start", "end", "duration"])
         sessions_df["start_dt"] = pd.to_datetime(sessions_df["start"], unit="s")
-        sessions_df["hour"] = sessions_df["start_dt"].dt.floor("H")
+        sessions_df["hour"] = sessions_df["start_dt"].dt.floor("h")
         sessions_df["day"] = sessions_df["start_dt"].dt.date
-        con.execute("CREATE TABLE sessions AS SELECT * FROM sessions_df")
+        con.execute("DROP TABLE IF EXISTS session")
+        con.execute("CREATE TABLE session AS SELECT * FROM sessions_df")
 
-     # ----------------------------
-    # Load and inspect metadata
-    # ----------------------------
-    site_metadata_df, charger_metadata_df = load_metadata(METADATA_PATH)
+    metadata_in_duckdb = False
+    if not metadata_in_duckdb:
+        # ----------------------------
+        # Load and inspect metadata
+        # ----------------------------
+        site_metadata_df, charger_metadata_df = load_metadata(METADATA_PATH)
+        con.execute("DROP TABLE IF EXISTS charger")
+        con.execute("CREATE TABLE charger AS SELECT * FROM charger_metadata_df")
+        con.execute("DROP TABLE IF EXISTS site")
+        con.execute("CREATE TABLE site AS SELECT * FROM site_metadata_df")
 
-    print("\n[INFO] Site metadata sample:")
-    print(site_metadata_df.head(2))
-    print("\n[INFO] Charger metadata sample:")
-    print(charger_metadata_df.head(2))
 
     # ----------------------------
     # DuckDB UI
     # ----------------------------
     con.execute("CALL start_ui_server()")
     print("Duckdb UI started on http://localhost:4213")
-
-    # ----------------------------
-    # DuckDB query
-    # ----------------------------
-    print("\n[INFO] Running first DuckDB query: total charge time per site per hour...")
-    result = con.query("""
-        SELECT site_id, hour, SUM(duration) AS total_seconds
-        FROM sessions
-        GROUP BY site_id, hour
-        ORDER BY hour
-    """).to_df()
     input("Press enter to stop")
-
-    print(result.size)
