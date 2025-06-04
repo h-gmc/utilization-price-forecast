@@ -1,0 +1,4 @@
+name: nobil_data
+type: duckdb
+options:
+  filename: ../../../nobil-playground/database.db
