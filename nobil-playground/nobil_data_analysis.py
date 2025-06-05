@@ -10,7 +10,7 @@ from collections import defaultdict
 # ------------------------
 
 TAR_PATH = os.path.join("data2", "2025-05-26.tar.gz")
-METADATA_PATH = os.path.join("data2", "metadata.json")
+METADATA_PATH = os.path.join("data2", "NOBILdump_SWE_forever-2025-06-03.json")
 # Duckdb connection
 con = duckdb.connect("database.db")
 
@@ -218,7 +218,7 @@ if __name__ == "__main__":
         con.execute("DROP TABLE IF EXISTS session")
         con.execute("CREATE TABLE session AS SELECT * FROM sessions_df")
 
-    metadata_in_duckdb = False
+    metadata_in_duckdb = True
     if not metadata_in_duckdb:
         # ----------------------------
         # Load and inspect metadata
