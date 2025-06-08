@@ -84,13 +84,17 @@ ORDER BY
     name=selected_site
     startingZoom=5
     tooltip={[
-        {id: 'site_id'}
+        {id: 'site_name'},
+        {id: 'site_id'},
+        {id: 'owner'},
+        {id: 'operator'},
+        {id: 'no_of_chargers'}
     ]}
     height=400
 />
-<!-- <Details title="Debug data">
+<Details title="Debug data">
 <pre class="text-sm">{JSON.stringify(inputs, null, 2)}</pre>
-</Details> -->
+</Details>
 
 {#if inputs.selected_site.site_id == true}
 No selected site
